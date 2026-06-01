@@ -8,6 +8,9 @@
 
 Να εκπαιδευτεί ένας agent που μαθαίνει να ελέγχει το Flappy Bird (flap / no-op) μεγιστοποιώντας το συνολικό reward και το score (pipes passed).
 
+<img width="447" height="590" alt="Στιγμιότυπο οθόνης 2026-05-31 131411" src="https://github.com/user-attachments/assets/eec1749d-3b09-407f-8374-eaac79b53f64" />
+
+
 ---
 
 ## 🧠 Μέθοδος
