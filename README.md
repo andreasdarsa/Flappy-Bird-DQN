@@ -252,7 +252,7 @@ The project is therefore primarily focused on implementing and evaluating a comp
 ## Project Structure
 
 ```text
-Reinforcement-Learning-Projects/
+Flappy-Bird-DQN/
 │
 ├── assets/
 │   └── bird.png
