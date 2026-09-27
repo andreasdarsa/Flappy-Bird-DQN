@@ -1,94 +1,172 @@
-# Flappy Bird with Deep Reinforcement Learning (DQN)
+# Flappy Bird with Deep Reinforcement Learning
 
-Υλοποίηση agent για το παιχνίδι Flappy Bird με χρήση **Deep Q-Networks (DQN)** σε περιβάλλον custom OpenAI Gym–style.
+A Deep Reinforcement Learning project that trains an agent to play **Flappy Bird** using a Deep Q-Network (DQN) implemented with **PyTorch**.
 
----
-
-## 🎯 Στόχος
-
-Να εκπαιδευτεί ένας agent που μαθαίνει να ελέγχει το Flappy Bird (flap / no-op) μεγιστοποιώντας το συνολικό reward και το score (pipes passed).
-
-<img width="447" height="590" alt="Στιγμιότυπο οθόνης 2026-05-31 131411" src="https://github.com/user-attachments/assets/eec1749d-3b09-407f-8374-eaac79b53f64" />
-
+The project includes a custom game environment, experience replay, a target network, ε-greedy exploration, reward shaping, hyperparameter tuning through grid search, and a 2,000-episode training run.
 
 ---
 
-## 🧠 Μέθοδος
+## Overview
 
-* **State (4D):**
+The goal is to train an agent that learns when to flap or do nothing in order to avoid obstacles and maximize its cumulative reward and game score.
 
-  * `bird_y`
-  * `bird_velocity`
-  * `pipe_x`
-  * `bird_y - pipe_gap_y`
-
-* **Actions:**
-
-  * `0`: Do nothing
-  * `1`: Flap
-
-* **Model:**
-
-  * Fully Connected Neural Network (MLP)
-  * 4 → 64 → 64 → 2
-
-* **Algorithm:**
-
-  * Deep Q-Network (DQN)
-  * Replay Buffer
-  * Target Network
-  * ε-greedy exploration
-
----
-
-## 🏗️ Project Structure
+The project follows the workflow:
 
 ```text
-proj_1/
-│
-├── flappy_bird.py      # Environment (game logic + reward)
-├── dqn.py              # Neural network
-├── agent.py            # DQN agent
-├── replay_buffer.py    # Experience replay
-├── train.py            # Training loop (2000 episodes)
-├── grid_search.py      # Hyperparameter tuning
-├── main.py             # Manual / demo play
-└── assets/             # Images (bird, etc.)
+Environment
+    ↓
+DQN Agent
+    ↓
+Experience Replay
+    ↓
+Hyperparameter Grid Search
+    ↓
+Best Configuration
+    ↓
+Final Training
+    ↓
+Training Curves
 ```
+
+The environment is implemented specifically for this project rather than using an external game or a pre-built reinforcement learning environment.
 
 ---
 
-## ▶️ Πώς να το τρέξεις
+## State and Action Space
 
-### 1. Εγκατάσταση dependencies
+The agent receives a **4-dimensional state vector** at every timestep:
 
-```bash
-pip install torch numpy pygame matplotlib
-```
+| State Variable | Description |
+|---|---|
+| `bird_y` | Bird's vertical position |
+| `bird_velocity` | Bird's vertical velocity |
+| `pipe_x` | Horizontal position of the next pipe |
+| `bird_y - pipe_gap_y` | Vertical distance between the bird and the center of the pipe gap |
+
+The state is normalized before being passed to the neural network.
+
+### Actions
+
+The action space contains two discrete actions:
+
+| Action | Description |
+|---|---|
+| `0` | Do nothing |
+| `1` | Flap |
 
 ---
 
-### 2. Manual Play (δοκιμή περιβάλλοντος)
+## DQN Architecture
 
-```bash
-python main.py
+The Q-network is a fully connected neural network (MLP):
+
+```text
+Input (4)
+   │
+   ▼
+Linear(4 → 64)
+   │
+  ReLU
+   │
+   ▼
+Linear(64 → 64)
+   │
+  ReLU
+   │
+   ▼
+Linear(64 → 2)
 ```
 
-Controls:
+The two output values represent the estimated Q-value for each available action.
 
-* `SPACE`: flap
+The agent uses two networks:
+
+- **Online network** — updated during training
+- **Target network** — periodically synchronized with the online network
 
 ---
 
-### 3. Hyperparameter Tuning με Grid Search
+## Reinforcement Learning Components
 
-Για να δοκιμαστούν διαφορετικοί συνδυασμοί υπερπαραμέτρων:
+### Experience Replay
 
-```bash
-python grid_search.py
+Transitions are stored in a replay buffer:
+
+```text
+(state, action, reward, next_state, done)
 ```
 
-Το grid search δοκιμάζει ενδεικτικά:
+During training, random mini-batches are sampled from the buffer instead of training only on consecutive experiences.
+
+This helps reduce correlations between consecutive observations and improves training stability.
+
+### Target Network
+
+A separate target network is used when calculating the temporal-difference target.
+
+The target network is periodically synchronized with the online network during training.
+
+### ε-Greedy Exploration
+
+The agent uses ε-greedy action selection:
+
+- High ε → more exploration
+- Low ε → more exploitation
+
+The implemented agent starts with:
+
+```text
+epsilon = 1.0
+```
+
+and gradually decays it toward a minimum value of:
+
+```text
+epsilon_min = 0.05
+```
+
+### Target Action Selection
+
+For the next state, the online network selects the action with the highest estimated Q-value, while the target network evaluates that action.
+
+This separates action selection from action evaluation and follows the Double-DQN-style target calculation used in the implementation.
+
+### Loss Function
+
+Training uses **Smooth L1 (Huber) loss**.
+
+Gradient clipping is also applied with a maximum gradient norm of `1.0`.
+
+---
+
+## Reward Design
+
+The environment uses reward shaping to provide the agent with both immediate and intermediate feedback.
+
+| Event | Reward |
+|---|---:|
+| Surviving a timestep | `+1` |
+| Passing a pipe | `+10` |
+| Collision / death | `-100` |
+| Flapping | `-0.1` |
+| Distance from pipe gap | Small negative penalty |
+
+The distance penalty is controlled by:
+
+```python
+distance_weight
+```
+
+This encourages the agent to remain closer to the center of the pipe gap instead of only reacting to imminent collisions.
+
+---
+
+## Hyperparameter Tuning
+
+A grid search was used to investigate the effect of several hyperparameters.
+
+The search space contains:
+
 ```python
 param_grid = {
     "lr": [1e-3, 5e-4],
@@ -98,103 +176,218 @@ param_grid = {
 }
 ```
 
-Στο τέλος εμφανίζονται τα καλύτερα configurations, ταξινομημένα βάσει average score.
+This results in:
 
-Παράδειγμα αποτελέσματος:
+```text
+2 × 2 × 2 × 2 = 16 configurations
 ```
-({'lr': 0.0005, 'epsilon_decay': 0.998, 'gamma': 0.95, 'distance_weight': 0.01}, 1.3)
-```
----
-### 4. Training με Best Configuration
-Αφού ολοκληρωθεί το grid search, μπορείς να πάρεις το καλύτερο configuration και να το περάσεις στο `train.py`.
 
-Παράδειγμα:
+Each configuration was trained for **500 episodes**.
+
+Configurations were compared using the **average score over the final 50 episodes**.
+
+### Best Configuration
+
+The configuration selected from the grid search was:
+
 ```python
 BEST_CONFIG = {
     "lr": 5e-4,
     "epsilon_decay": 0.998,
     "gamma": 0.95,
-    "distance_weight": 0.01,
-    "episodes": 2000
+    "distance_weight": 0.01
 }
 ```
 
-Έπειτα τρέχεις:
+The corresponding average score over the final 50 episodes was:
+
+```text
+1.30
+```
+
+---
+
+## Final Training
+
+The selected configuration was then used for a longer training run of:
+
+```text
+2,000 episodes
+```
+
+The training process records:
+
+- Episode scores
+- Episode rewards
+- Moving averages
+- Training loss
+
+The training script also saves the trained models:
+
+```text
+best_flappy_model.pth
+final_flappy_model.pth
+```
+
+---
+
+## Results
+
+The repository contains the learning curves produced during training.
+
+### Training Score
+
+![Training Score](results/training_scores.png)
+
+### Training Reward
+
+![Training Reward](results/training_rewards.png)
+
+The results show the learning behaviour of the agent throughout the training process. Performance is not perfectly stable, highlighting the sensitivity of this relatively small DQN setup to exploration, reward shaping, and training duration.
+
+The project is therefore primarily focused on implementing and evaluating a complete Deep Reinforcement Learning pipeline rather than achieving a high game score.
+
+---
+
+## Project Structure
+
+```text
+Reinforcement-Learning-Projects/
+│
+├── assets/
+│   └── bird.png
+│
+├── results/
+│   ├── training_scores.png
+│   └── training_rewards.png
+│
+├── src/
+│   ├── agent.py
+│   ├── dqn.py
+│   ├── flappy_bird.py
+│   ├── grid_search.py
+│   ├── main.py
+│   ├── replay_buffer.py
+│   └── train.py
+│
+├── .gitignore
+├── README.md
+└── requirements.txt
+```
+
+### Main Components
+
+| File | Purpose |
+|---|---|
+| `flappy_bird.py` | Custom Flappy Bird environment and reward logic |
+| `dqn.py` | Neural network architecture |
+| `agent.py` | DQN agent and training logic |
+| `replay_buffer.py` | Experience replay implementation |
+| `grid_search.py` | Hyperparameter search |
+| `train.py` | Final training pipeline |
+| `main.py` | Manual interaction / environment demo |
+
+---
+
+## Running the Project
+
+### 1. Install Dependencies
+
 ```bash
-python train.py
-```
-Το training αποθηκεύει:
-- `best_flappy_model.pth`
-- `final_flappy_model.pth`
-- `training_scores.png`
-- `training_rewards.png`
-
----
-
-## ⚙️ Training Configuration
-
-Το τελικό training έγινε με το καλύτερο configuration που προέκυψε από grid search:
-
-```python
-lr = 5e-4
-epsilon_decay = 0.998
-gamma = 0.95
-distance_weight = 0.01
-episodes = 2000
+pip install -r requirements.txt
 ```
 
-Η γενική ροή είναι:
+### 2. Run the Environment
 
-```manual test → grid search → select best config → long training run → evaluation plots```
+To manually test the Flappy Bird environment:
 
----
+```bash
+python src/main.py
+```
 
-## 🧪 Reward Design
+Use:
 
-* +1 survival
-* +10 pipe
-* -100 death
-* penalty απόστασης από gap
-* μικρό penalty για flap
+```text
+SPACE → Flap
+```
 
----
+### 3. Run Hyperparameter Search
 
-## 📈 Αποτελέσματα
+To reproduce the grid search:
 
-* Σταδιακή βελτίωση performance
-* Αύξηση average score μετά από tuning
-* Visualization μέσω learning curves
+```bash
+python src/grid_search.py
+```
 
----
+### 4. Train the Agent
 
-## ⚠️ Περιορισμοί
+To run the final training configuration:
 
-* Χαμηλό τελικό score
-* Ευαισθησία σε reward shaping
-* Περιορισμένος χρόνος εκπαίδευσης
+```bash
+python src/train.py
+```
 
----
-
-## 🚀 Μελλοντική εργασία
-
-* Double DQN
-* Dueling DQN
-* CNN (image-based input)
-* Ενισχυμένη σχεδίαση ανταμοιβών
+The training script produces the model checkpoints and learning curves described above.
 
 ---
 
-## 📚 Tech Stack
+## Limitations
 
-* Python
-* PyTorch
-* NumPy
-* Pygame
+The current implementation has several limitations:
+
+- The agent uses a relatively small MLP rather than raw image observations.
+- Training performance is sensitive to reward shaping and hyperparameter selection.
+- The final score remains relatively low and is not consistently stable.
+- The experiments are based on a limited number of training runs and configurations.
+- The current environment provides engineered state features rather than visual input.
+
+These limitations leave room for further experimentation.
 
 ---
 
-## 👤 Δημιουργήθηκε από
+## Future Work
 
-Ανδρέας Δαρσακλής
-1η εργασία στην Υπολογιστική Νοημοσύνη - Βαθιά Ενισχυτική Μάθηση
-Τμήμα Πληροφορικής - ΑΠΘ
+Possible extensions include:
+
+- More extensive hyperparameter tuning
+- Training with multiple random seeds
+- Dueling DQN architecture
+- Prioritized Experience Replay
+- Explicit evaluation of a full Double DQN implementation
+- CNN-based image observations
+- Further experimentation with reward shaping
+- Longer training runs
+
+---
+
+## Technologies
+
+- **Python**
+- **PyTorch**
+- **NumPy**
+- **Pygame**
+- **Matplotlib**
+
+---
+
+## Key Concepts Demonstrated
+
+- Deep Q-Learning
+- Experience Replay
+- Target Networks
+- ε-Greedy Exploration
+- Reward Shaping
+- Q-Value Estimation
+- Huber Loss
+- Gradient Clipping
+- Hyperparameter Grid Search
+- Reinforcement Learning Training and Evaluation
+
+---
+
+## Author
+
+**Andreas Darsaklis**
+
+Computer Science  
+Aristotle University of Thessaloniki
